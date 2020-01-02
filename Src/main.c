@@ -14,6 +14,8 @@
 /* USER CODE BEGIN Includes */
 #include "ssd1306.h"
 #include "math.h"
+#include <stdio.h>
+#include <string.h>
 /* USER CODE END Includes */
 
 /* Private typedef -----------------------------------------------------------*/
@@ -70,7 +72,7 @@ float inv_sqrt_nsamples;
 } SineAnalyzer;
 #define SineAnalyzer_DEFAULTS { 		0,							\
 		0,					\
-		1.65,					\
+		1.503,					\
 		0,							\
 		0,							\
 		0,						\
@@ -85,10 +87,10 @@ float inv_sqrt_nsamples;
 		0,					\
 		0			\
 }
-float VrmsReal=0, Vfreq=0 ;
-int curr_sign=0;
+float VrmsReal=0, Vfreq=0, VrmsOut=0, prev_Vrms=0 ;
+int max_sample=0;
 SineAnalyzer sine_mainsV = SineAnalyzer_DEFAULTS;
-
+SineAnalyzer sine_mainsI = SineAnalyzer_DEFAULTS;
 /* USER CODE END PV */
 
 /* Private function prototypes -----------------------------------------------*/
@@ -106,8 +108,8 @@ void StartTask02(void const * argument);
 
 /* USER CODE BEGIN PFP */
 int PWM_DUTY = 100;
-uint16_t adc_value[2];
-uint16_t adc_f4, adc_f5;
+uint16_t adc_value[2], U_count=0, U_step=0;
+char res[10];
 /* USER CODE END PFP */
 
 /* Private user code ---------------------------------------------------------*/
@@ -124,91 +126,133 @@ uint16_t adc_f4, adc_f5;
 {
   /* Place your implementation of fputc here */
   /* e.g. write a character to the USART */
-	HAL_UART_Transmit(&huart2, (uint8_t*)&ch,1,100);
+	HAL_UART_Transmit(&huart5, (uint8_t*)&ch,1,100);
   return ch;
 }
-void SineAnalyzer_CLA_C(SineAnalyzer v)	{													
-		if(v.Vin>v.Threshold)						
-	{												
-		/*curr_sample_norm = v.Vin - v.Threshold;*/	
-		v.curr_sample_norm = v.Vin;					
-		v.curr_sign = 1;								
-	}												
-	else											
-	{												
-	/*	curr_sample_norm =  v.Threshold - v.Vin;*/	
-		v.curr_sample_norm = v.Vin;					
-		v.curr_sign = 0;								
-	}							
-		v.curr_sample_norm = v.Vin;													
-		v.PositiveCycle = v.curr_sign;												
-		if((v.prev_sign != v.curr_sign) && (v.curr_sign == 1)) {					
-			v.ZCD = 1;																
-			v.inv_nsamples = 1/v.nsamples;								
-			v.inv_sqrt_nsamples = 1/sqrt(v.nsamples);							
-			v.Vavg = v.Vacc_avg * v.inv_nsamples;									
-			v.Vrms = sqrt(v.Vacc_rms) * v.inv_sqrt_nsamples;	
-			v.SigFreq = v.SampleFreq * v.inv_nsamples;								
-			v.prev_sign = v.curr_sign;												
-			v.Vacc_avg = 0;															
-			v.Vacc_rms = 0;															
-			v.nsamples = 0;															
-		}																			
-		else {																		
-			++(v.nsamples);															
-			v.Vacc_avg = v.Vacc_avg + v.curr_sample_norm;							
-			v.Vacc_rms = v.Vacc_rms + (v.curr_sample_norm * v.curr_sample_norm);	
-			v.ZCD = 0;														
-			v.prev_sign = v.curr_sign;												
-		}
-}	
 void HAL_TIM_PeriodElapsedCallback(TIM_HandleTypeDef *htim)
 {
 	if(htim->Instance == TIM4)
 	{
-		HAL_GPIO_TogglePin(GPIOC, GPIO_PIN_1);
+		//HAL_GPIO_TogglePin(GPIOC, GPIO_PIN_1);
 		HAL_ADC_Start_DMA(&hadc1, (uint32_t*)&adc_value, 2);
 		for(int i=0;i<15;i++);
 		HAL_ADC_Stop_DMA(&hadc1);
-		for(int i=0;i<15;i++);		
+		//for(int i=0;i<15;i++);		
 		sine_mainsV.Vin = adc_value[0]*3.3/4096.0;//voltage
-		sine_mainsV.curr_sample_norm = sine_mainsV.Vin - 1.65;
-		if(sine_mainsV.curr_sample_norm>sine_mainsV.Threshold)						
+		sine_mainsI.Vin = adc_value[1]*3.3/4096.0;//voltage
+//if(tmp_flag==0){		
+		if ( sine_mainsV.Vin > sine_mainsV.Threshold)						
 	{												
-			
+		sine_mainsV.curr_sample_norm = sine_mainsV.Vin - sine_mainsV.Threshold;
 		//sine_mainsV.curr_sample_norm = sine_mainsV.Vin;					
 		sine_mainsV.curr_sign = 1;								
 	}												
 	else											
 	{												
-	  //sine_mainsV.curr_sample_norm =  sine_mainsV.Threshold - sine_mainsV.Vin;	
-		//sine_mainsV.curr_sample_norm = sine_mainsV.Vin;	
-		sine_mainsV.curr_sample_norm = 1.65 - sine_mainsV.Vin;		
+		sine_mainsV.curr_sample_norm =  sine_mainsV.Threshold - sine_mainsV.Vin;
+		//sine_mainsV.curr_sample_norm = sine_mainsV.Vin;					
 		sine_mainsV.curr_sign = 0;								
-	}							
-		//sine_mainsV.curr_sample_norm = sine_mainsV.Vin;													
-		sine_mainsV.PositiveCycle = sine_mainsV.curr_sign;												
-		if((sine_mainsV.prev_sign != sine_mainsV.curr_sign) && (sine_mainsV.curr_sign == 1)) {					
-			sine_mainsV.ZCD = 1;																
-			sine_mainsV.inv_nsamples = 1/sine_mainsV.nsamples;								
-			sine_mainsV.inv_sqrt_nsamples = 1/sqrt(sine_mainsV.nsamples);							
-			sine_mainsV.Vavg = sine_mainsV.Vacc_avg * sine_mainsV.inv_nsamples;									
-			sine_mainsV.Vrms = sqrt(sine_mainsV.Vacc_rms) * sine_mainsV.inv_sqrt_nsamples;	
-			sine_mainsV.SigFreq = sine_mainsV.SampleFreq * sine_mainsV.inv_nsamples;								
-			sine_mainsV.prev_sign = sine_mainsV.curr_sign;												
-			sine_mainsV.Vacc_avg = 0;															
-			sine_mainsV.Vacc_rms = 0;															
-			sine_mainsV.nsamples = 0;															
-		}																			
-		else {																		
-			++(sine_mainsV.nsamples);															
-			sine_mainsV.Vacc_avg = sine_mainsV.Vacc_avg + sine_mainsV.curr_sample_norm;							
-			sine_mainsV.Vacc_rms = sine_mainsV.Vacc_rms + (sine_mainsV.curr_sample_norm * sine_mainsV.curr_sample_norm);	
-			sine_mainsV.ZCD = 0;														
-			sine_mainsV.prev_sign = sine_mainsV.curr_sign;												
+	}												
+	sine_mainsV.PositiveCycle = sine_mainsV.curr_sign;
+	
+	if((sine_mainsV.prev_sign != sine_mainsV.curr_sign) && (sine_mainsV.curr_sign == 1))		
+	{ 														
+    	//tmp_flag=1;	
+		sine_mainsV.ZCD=1;											
+		sine_mainsV.inv_nsamples = 1.0/sine_mainsV.nsamples;				
+		sine_mainsV.inv_sqrt_nsamples = 1.0/sqrt(sine_mainsV.nsamples);						
+		sine_mainsV.Vavg = sine_mainsV.Vacc_avg*sine_mainsV.inv_nsamples;							
+		sine_mainsV.Vrms = sqrt(sine_mainsV.Vacc_rms)*sine_mainsV.inv_sqrt_nsamples ;	
+		sine_mainsV.SigFreq = sine_mainsV.SampleFreq*sine_mainsV.inv_nsamples; 
+		sine_mainsV.prev_sign = sine_mainsV.curr_sign;			
+		U_count++;
+		if(((prev_Vrms-sine_mainsV.Vrms)<0.0282)||((sine_mainsV.Vrms-prev_Vrms)<0.0282))
+		{
+			VrmsReal=	sine_mainsV.Vrms	+VrmsReal;
+			U_step++;
 		}
+		if(U_count==50){
+			VrmsOut=VrmsReal/U_step;
+			VrmsReal=0;
+			U_count=0;
+			U_step=0;
+		}
+		prev_Vrms=sine_mainsV.Vrms;		
+		sine_mainsV.Vacc_avg = 0;								
+		sine_mainsV.Vacc_rms = 0;								
+		sine_mainsV.nsamples=0;	
+	}												
+	else											
+	{												
+		sine_mainsV.nsamples++;								
+		sine_mainsV.Vacc_avg = sine_mainsV.Vacc_avg+sine_mainsV.curr_sample_norm;		
+		sine_mainsV.Vacc_rms = sine_mainsV.Vacc_rms+sine_mainsV.curr_sample_norm*sine_mainsV.curr_sample_norm;		
+		sine_mainsV.ZCD=0;									
+		sine_mainsV.prev_sign = sine_mainsV.curr_sign;						
+	}
+//}
 }	
 	}
+// Reverses a string 'str' of length 'len' 
+void reverse(char* str, int len) 
+{ 
+    int i = 0, j = len - 1, temp; 
+    while (i < j) { 
+        temp = str[i]; 
+        str[i] = str[j]; 
+        str[j] = temp; 
+        i++; 
+        j--; 
+    } 
+} 
+  
+// Converts a given integer x to string str[].  
+// d is the number of digits required in the output.  
+// If d is more than the number of digits in x,  
+// then 0s are added at the beginning. 
+int intToStr(int x, char str[], int d) 
+{ 
+    int i = 0; 
+    while (x) { 
+        str[i++] = (x % 10) + '0'; 
+        x = x / 10; 
+    } 
+  
+    // If number of digits required is more, then 
+    // add 0s at the beginning 
+    while (i < d) 
+        str[i++] = '0'; 
+  
+    reverse(str, i); 
+    str[i] = '\0'; 
+    return i; 
+} 
+  
+// Converts a floating-point/double number to a string. 
+void ftoa(float n, char* res, int afterpoint) 
+{ 
+    // Extract integer part 
+    int ipart = (int)n; 
+  
+    // Extract floating part 
+    float fpart = n - (float)ipart; 
+  
+    // convert integer part to string 
+    int i = intToStr(ipart, res, 0); 
+  
+    // check for display option after point 
+    if (afterpoint != 0) { 
+        res[i] = '.'; // add dot 
+  
+        // Get the value of fraction part upto given no. 
+        // of points after dot. The third parameter  
+        // is needed to handle cases like 233.007 
+        fpart = fpart * pow(10, afterpoint); 
+  
+        intToStr((int)fpart, res + i + 1, afterpoint); 
+    } 
+} 
+
 /* USER CODE END 0 */
 
 /**
@@ -247,8 +291,23 @@ int main(void)
   MX_USART2_UART_Init();
   MX_TIM4_Init();
   /* USER CODE BEGIN 2 */
+	ssd1306_Init();
+  HAL_Delay(1000);
+  ssd1306_Fill(White);
+  ssd1306_UpdateScreen();
+
+  HAL_Delay(1000);
+
+  ssd1306_SetCursor(17,2);
+  ssd1306_WriteString("Lora Meter",Font_11x18,Black);
+	ssd1306_SetCursor(0,20);
+  ssd1306_WriteString("V=",Font_11x18,Black);
+	ssd1306_SetCursor(0,40);
+  ssd1306_WriteString("I=",Font_11x18,Black);
+  ssd1306_UpdateScreen();
 	HAL_TIM_PWM_Start(&htim2, TIM_CHANNEL_2);
 	HAL_TIM_Base_Start_IT(&htim4);
+	
   /* USER CODE END 2 */
 
   /* USER CODE BEGIN RTOS_MUTEX */
@@ -273,10 +332,11 @@ int main(void)
   myTask02Handle = osThreadCreate(osThread(myTask02), NULL);
 
   /* USER CODE BEGIN RTOS_THREADS */
-  /* add threads, ... */
+  
   /* USER CODE END RTOS_THREADS */
 
   /* USER CODE BEGIN RTOS_QUEUES */
+	//ON LED DRIVER
   HAL_GPIO_WritePin(GPIOC, GPIO_PIN_0, GPIO_PIN_SET);
 
   /* USER CODE END RTOS_QUEUES */
@@ -315,7 +375,7 @@ void SystemClock_Config(void)
   RCC_OscInitStruct.HSICalibrationValue = RCC_HSICALIBRATION_DEFAULT;
   RCC_OscInitStruct.PLL.PLLState = RCC_PLL_ON;
   RCC_OscInitStruct.PLL.PLLSource = RCC_PLLSOURCE_HSI_DIV2;
-  RCC_OscInitStruct.PLL.PLLMUL = RCC_PLL_MUL12;
+  RCC_OscInitStruct.PLL.PLLMUL = RCC_PLL_MUL16;
   if (HAL_RCC_OscConfig(&RCC_OscInitStruct) != HAL_OK)
   {
     Error_Handler();
@@ -329,7 +389,7 @@ void SystemClock_Config(void)
   RCC_ClkInitStruct.APB1CLKDivider = RCC_HCLK_DIV2;
   RCC_ClkInitStruct.APB2CLKDivider = RCC_HCLK_DIV1;
 
-  if (HAL_RCC_ClockConfig(&RCC_ClkInitStruct, FLASH_LATENCY_1) != HAL_OK)
+  if (HAL_RCC_ClockConfig(&RCC_ClkInitStruct, FLASH_LATENCY_2) != HAL_OK)
   {
     Error_Handler();
   }
@@ -448,9 +508,9 @@ static void MX_TIM2_Init(void)
 
   /* USER CODE END TIM2_Init 1 */
   htim2.Instance = TIM2;
-  htim2.Init.Prescaler = 24;
+  htim2.Init.Prescaler = 64;
   htim2.Init.CounterMode = TIM_COUNTERMODE_UP;
-  htim2.Init.Period = 0;
+  htim2.Init.Period = 1000;
   htim2.Init.ClockDivision = TIM_CLOCKDIVISION_DIV1;
   htim2.Init.AutoReloadPreload = TIM_AUTORELOAD_PRELOAD_DISABLE;
   if (HAL_TIM_Base_Init(&htim2) != HAL_OK)
@@ -506,9 +566,9 @@ static void MX_TIM4_Init(void)
 
   /* USER CODE END TIM4_Init 1 */
   htim4.Instance = TIM4;
-  htim4.Init.Prescaler = 48;
+  htim4.Init.Prescaler = 64;
   htim4.Init.CounterMode = TIM_COUNTERMODE_UP;
-  htim4.Init.Period = 100;
+  htim4.Init.Period = 200;
   htim4.Init.ClockDivision = TIM_CLOCKDIVISION_DIV1;
   htim4.Init.AutoReloadPreload = TIM_AUTORELOAD_PRELOAD_DISABLE;
   if (HAL_TIM_Base_Init(&htim4) != HAL_OK)
@@ -668,15 +728,25 @@ void StartDefaultTask(void const * argument)
   /* Infinite loop */
 	//sine analyzer initialization
 sine_mainsV.Vin=0;
-sine_mainsV.SampleFreq=20000; // Sampling rate 10KHz
-sine_mainsV.Threshold=0.02; // Threshold set to 0.02
+sine_mainsV.SampleFreq=5000; // Sampling rate 10KHz
+//sine_mainsV.Threshold=0.02; // Threshold set to 0.02
   for(;;)
   {
-		VrmsReal = sine_mainsV.Vrms;
+		//if(tmp_flag==1){
+		
+		VrmsOut = VrmsOut*705.9;
 		Vfreq=sine_mainsV.SigFreq;
-		printf("Vrms  = %.2f\r\n", VrmsReal);
-		printf("sample = %d, Freq=%.2f\r\n", sine_mainsV.nsamples ,Vfreq);
-    osDelay(1000);
+		ftoa(VrmsOut, res, 1); 
+		printf("Vrms = %s\n",res);
+		//printf("sample=%d, Freq=%.2f\r\n", sine_mainsV.nsamples, Vfreq);
+		//printf("Thershold=%f, Vin = %f\r\n\n", sine_mainsV.Threshold, sine_mainsV.Vin);
+		ssd1306_SetCursor(30,20);
+    ssd1306_WriteString(res,Font_11x18,Black);
+		ssd1306_SetCursor(30,40);
+    ssd1306_WriteString("720",Font_11x18,Black);
+    ssd1306_UpdateScreen();
+		HAL_GPIO_TogglePin(GPIOC, GPIO_PIN_2);
+    osDelay(1500);
   }
   /* USER CODE END 5 */ 
 }
@@ -695,24 +765,20 @@ void StartTask02(void const * argument)
   for(;;)
   {
 		//HAL_GPIO_TogglePin(GPIOC, GPIO_PIN_2);
-		//HAL_GPIO_TogglePin(GPIOC, GPIO_PIN_1);
+		HAL_GPIO_TogglePin(GPIOC, GPIO_PIN_1);
 		//HAL_GPIO_TogglePin(GPIOC, GPIO_PIN_2);
 		//HAL_GPIO_TogglePin(GPIOA, GPIO_PIN_1);
 		//HAL_GPIO_TogglePin(GPIOA, GPIO_PIN_2);
 		//HAL_GPIO_TogglePin(GPIOA, GPIO_PIN_3);
-		__HAL_TIM_SET_COMPARE(&htim2, TIM_CHANNEL_2, PWM_DUTY);
+		//__HAL_TIM_SET_COMPARE(&htim2, TIM_CHANNEL_2, PWM_DUTY);
 		//HAL_ADC_Start_DMA(&hadc1, (uint32_t*)&adc_value, 2);
 		//osDelay(12);
 		//HAL_ADC_Stop_DMA(&hadc1);
 		//printf("ADC4 value = %d, ADC5 value=%d\r\n", adc_value[0], adc_value[1]);
 		//adc_f4=adc_value[0]*100.01/4096.0;//voltage
 		//adc_f5=adc_value[1]*49.01/4096.0;//current
-		ssd1306_SetCursor(0,20);
-    //ssd1306_WriteString(adc_in4,Font_11x18,Black);
-		ssd1306_SetCursor(0,40);
-    //ssd1306_WriteString(adc_in5,Font_11x18,Black);
-    ssd1306_UpdateScreen();
-    osDelay(1500);
+		
+    osDelay(500);
   }
   /* USER CODE END StartTask02 */
 }

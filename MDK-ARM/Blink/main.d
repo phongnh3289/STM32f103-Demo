@@ -47,3 +47,4 @@ blink\main.o: ../Middlewares/Third_Party/FreeRTOS/Source/include/event_groups.h
 blink\main.o: ../Inc/ssd1306.h
 blink\main.o: ../Inc/fonts.h
 blink\main.o: C:\Keil_v5\ARM\ARMCC\Bin\..\include\math.h
+blink\main.o: C:\Keil_v5\ARM\ARMCC\Bin\..\include\string.h
