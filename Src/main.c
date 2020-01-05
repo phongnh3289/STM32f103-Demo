@@ -164,18 +164,22 @@ void HAL_TIM_PeriodElapsedCallback(TIM_HandleTypeDef *htim)
 		sine_mainsV.Vavg = sine_mainsV.Vacc_avg*sine_mainsV.inv_nsamples;							
 		sine_mainsV.Vrms = sqrt(sine_mainsV.Vacc_rms)*sine_mainsV.inv_sqrt_nsamples ;	
 		sine_mainsV.SigFreq = sine_mainsV.SampleFreq*sine_mainsV.inv_nsamples; 
-		sine_mainsV.prev_sign = sine_mainsV.curr_sign;			
-		U_count++;
+		sine_mainsV.prev_sign = sine_mainsV.curr_sign;	
+			
+		if(U_count<50){U_count++;VrmsReal=sine_mainsV.Vrms;}
+		else{
 		if(((prev_Vrms-sine_mainsV.Vrms)<0.0282)||((sine_mainsV.Vrms-prev_Vrms)<0.0282))
 		{
-			VrmsReal=	sine_mainsV.Vrms	+VrmsReal;
-			U_step++;
+			//VrmsReal=	sine_mainsV.Vrms	+VrmsReal;
+			VrmsOut=0.005*sine_mainsV.Vrms+0.995*VrmsReal;
+			VrmsReal=VrmsOut;
 		}
-		if(U_count==50){
-			VrmsOut=VrmsReal/U_step;
-			VrmsReal=0;
-			U_count=0;
-			U_step=0;
+		//if(U_count==50){
+		//	VrmsOut=VrmsReal/U_step;
+		//	VrmsReal=0;
+		//	U_count=0;
+		//	U_step=0;
+		//}
 		}
 		prev_Vrms=sine_mainsV.Vrms;		
 		sine_mainsV.Vacc_avg = 0;								
@@ -734,7 +738,7 @@ sine_mainsV.SampleFreq=5000; // Sampling rate 10KHz
   {
 		//if(tmp_flag==1){
 		
-		VrmsOut = VrmsOut*705.9;
+		VrmsOut = VrmsOut*811.9;
 		Vfreq=sine_mainsV.SigFreq;
 		ftoa(VrmsOut, res, 1); 
 		printf("Vrms = %s\n",res);
